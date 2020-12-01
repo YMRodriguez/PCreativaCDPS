@@ -46,7 +46,7 @@ def setConfig(order):
     num = [findNServ(), findNCli(), findNLoadBalanc()]
     words = ["s", "c", "lb"]
     for m,n in zip(num, words):
-        for i in range (0,int(m)):
+        for i in range (1,int(m)):
             call (["sudo", "virsh", f"{order}", f"{n}{i}"])
             
 #Open virtual machine consoles
@@ -54,19 +54,43 @@ def openConsoles():
     num = [findNServ(), findNCli(), findNLoadBalanc()]
     words = ["s", "c", "lb"]
     for m,n in zip(num, words):
-        for i in range (0,int(m)): 
+        for i in range (1,int(m)): 
             os.system(f"xterm -e \'sudo virsh console {n}{i}\'&")
+            
+#Set configuration to either start or stop a single virtual machine
+def setUpOne(order, vm, identifier):
+    num = [findNServ(), findNCli(), findNLoadBalanc()]
+    words = ["s", "c", "lb"]
+    for m,n in zip(num, words):
+        if vm == n:
+            if identifier <= m:
+                break
+            else:
+                print("The parameter does not match any of the identifiers.")
+    call (["sudo", "virsh", f"{order}", f"{vm}{identifier}"])
+    if order == "start":
+        os.system(f"xterm -e \'sudo virsh console {vm}{identifier}\'&")
         
 #Start virtual machines and show their consoles
 def startOrder():
     call(["sudo", "virt-manager"])
-    setConfig("start")
-    openConsoles()
+    if len(sys.argv[2])>1 & len(sys.argv[3])>1:
+        setUpOne("start",sys.argv[2], sys.argv[3])
+    elif len(sys.argv[2])<1 & len(sys.argv[3])<1:
+        setConfig("start")
+        openConsoles()
+    else:
+        print("The parameters do not match any of the established patterns.")
 
 #Stop virtual machines saving their current state
 def stopOrder():
     call(["sudo", "virt-manager"])
-    setConfig("shutdown")
+    if len(sys.argv[2])>1 & len(sys.argv[3])>1:
+        setUpOne("shutdown",sys.argv[2], sys.argv[3])
+    elif len(sys.argv[2])<1 & len(sys.argv[3])<1:
+        setConfig("shutdown")
+    else:
+        print("The parameters do not match any of the established patterns.")
 
 #Delete all created files releasing the practice's scenario
 def releaseOrder():
@@ -82,5 +106,8 @@ if sys.argv[1] == "stop":
     stopOrder()
 if sys.argv[1] == "release":
     releaseOrder()
+    
+
+
     
     
