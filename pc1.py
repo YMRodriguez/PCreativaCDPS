@@ -12,8 +12,7 @@ from lxml import etree
 import os
 from _cffi_backend import string
 import debinterface
-from proofXMLeditor import editXML, createHostnameForMV,\
-    createInterfacesFileForMV
+
 
 # Logs administrator
 logging.basicConfig(level=logging.DEBUG)
@@ -93,7 +92,7 @@ def editXML(id, LANS):
     file = etree.parse("plantilla-vm-pc1.xml", parser)
     # Edit name and source file location
     file.find('/name').text = id
-    file.find('/devices/disk/source').set('file', id + '.qcow2')
+    file.find('/devices/disk/source').set('file', "/" + id + '.qcow2')
     # Edit network interfaces
     if 's' in id:
         file.find('/devices/interface/source').set('bridge', LANS[1]) 
