@@ -224,6 +224,7 @@ def setLbAsRouter(id):
 #---------------- Begin START logic --------------------
 #Start virtual machines and show their consoles
 def startOrder():
+    monitoring()  
     nMVs = findNumberMachines()
     machineImageIds = handleMVIds(nMVs[0], nMVs[1], nMVs[2])
     try:
@@ -236,7 +237,7 @@ def startOrder():
     except:  
         for i in machineImageIds:
             setConfig("start", i)
-            openConsoles(i)    
+            openConsoles(i)  
     #map(lambda x: setConfig("start" , x), machineImageIds)
     #map(lambda x: openConsoles(x), machineImageIds)
 # --------------- End START logic ----------------------
@@ -307,6 +308,17 @@ def setUpOne(order):
         print("The parameter introduced does not match any of the virtual machine identifiers.")
     else:
         flag = 0    
+ 
+ 
+#This function implements the monitoring of the virtual machines
+def monitoring():
+    nMVs = findNumberMachines()
+    ids = handleMVIds(nMVs[0], nMVs[1], nMVs[2])
+    orders = ["domstate", "dominfo", "cpu-stats"]
+    for i in ids:
+        for j in orders:
+            commandOrder = "watch" + f" sudo virsh {j} " + i
+            call (commandOrder.split(" "))
            
 #------ Main logic ---------   
 if sys.argv[1] == "create":
