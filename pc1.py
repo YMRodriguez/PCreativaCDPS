@@ -12,6 +12,7 @@ from lxml import etree
 import os
 from _cffi_backend import string
 import debinterface
+import pyhaproxy
 
 
 # Logs administrator
@@ -47,20 +48,17 @@ def createOrder(nServers=2, nClients=1, nLB=1):
     LANS = ["LAN1", "LAN2"]
     setUpBridges(LANS)
     
-    print(machineImageIds)
-
     for i in machineImageIds:
         editXML(i, LANS)
-    
-    for i in machineImageIds:
         createHostnameForMV(i)
         createInterfacesFileForMV(i)
-        
-    for i in machineImageIds:
-        setLbAsRouter(i)
     
+    editIndexHtml(machineImageIds)
+    setLbAsRouter(machineImageIds)
+    
+    createHAProxy(machineImageIds)
+    #addHostToVirtualNetwork()
     call(["sudo", "virt-manager"])
-    print(machineImageIds)
     
     defineMVs(machineImageIds)
 
@@ -92,7 +90,7 @@ def editXML(id, LANS):
     file = etree.parse("plantilla-vm-pc1.xml", parser)
     # Edit name and source file location
     file.find('/name').text = id
-    file.find('/devices/disk/source').set('file', "/" + id + '.qcow2')
+    file.find('/devices/disk/source').set('file', os.getcwd() + "/" + id + '.qcow2')
     # Edit network interfaces
     if 's' in id:
         file.find('/devices/interface/source').set('bridge', LANS[1]) 
@@ -109,6 +107,18 @@ def editXML(id, LANS):
     file.write(id + ".xml", pretty_print=True)
     logger.debug("XML edited")
 
+def editIndexHtml(ids):
+    for id in ids:
+        if 's' in id:
+            filepath = os.path.join('/mnt/tmp', 'index.html')
+            if not os.path.exists('/mnt/tmp'):
+                logger.debug("tmp directory does not exists")
+            f = open(filepath, "w+")
+            f.write(id  + "\n")
+            f.close()
+            confCommand = "sudo virt-copy-in -a " + id + ".qcow2 /mnt/tmp/index.html /var/www/html/"
+            call(confCommand.split(" "))
+    
 # ----------- Machines--------------------------------------
 # This function creates all the images from a given list of the machines    
 def createMachineImages(ids):
@@ -141,7 +151,7 @@ def createHostnameForMV(id):
     if not os.path.exists('/mnt/tmp'):
         logger.debug("tmp directory does not exists")
     f = open(filepath, "w+")
-    f.write(id  + "/n")
+    f.write(id  + "\n")
     f.close()
     confCommand = "sudo virt-copy-in -a " + id + ".qcow2 /mnt/tmp/hostname /etc/"
     call(confCommand.split(" "))
@@ -158,11 +168,9 @@ def createInterfacesFileForMV(id):
     if 's' in id:
         options = {
             'addrFam': 'inet',
-        'broadcast': '10.0.2.255',
         'name': 'eth0',
-        'up': [],
+        'auto': True,
         'gateway': '10.0.2.1',
-        'down': [],
         'source': 'static',
         'netmask': '255.255.255.0',
         'address': '10.0.2.1' + str(numberDirIP)
@@ -171,14 +179,12 @@ def createInterfacesFileForMV(id):
     if 'c' in id: #Aqui hay que ver como esquivar al host
         options = {
             'addrFam': 'inet',
-        'broadcast': '10.0.1.255',
         'name': 'eth0',
-        'up': [],
+        'auto': True,
         'gateway': '10.0.1.1',
-        'down': [],
         'source': 'static',
         'netmask': '255.255.255.0',
-        'address': '10.0.1.' + str(numberDirIP)
+        'address': '10.0.1.' + str(numberDirIP+3) #se añaden desde el 4 para evitar colision
         }
         interfaces.addAdapter(options)
     if 'lb' in id: #Hay que ver como hacerlo generico
@@ -186,9 +192,8 @@ def createInterfacesFileForMV(id):
             'addrFam': 'inet',
         'broadcast': '10.0.1.255',
         'name': 'eth0',
-        'up': [],
+        'auto': True,
         'gateway': '10.0.1.1',
-        'down': [],
         'source': 'static',
         'netmask': '255.255.255.0',
         'address': '10.0.1.1'
@@ -197,9 +202,8 @@ def createInterfacesFileForMV(id):
             'addrFam': 'inet',
         'broadcast': '10.0.2.255',
         'name': 'eth1',
-        'up': [],
+        'auto': True,
         'gateway': '10.0.2.1',
-        'down': [],
         'source': 'static',
         'netmask': '255.255.255.0',
         'address': '10.0.2.1'
@@ -214,17 +218,70 @@ def createInterfacesFileForMV(id):
     call(confCommand.split(" "))
 
 # This function sets the lbs from the given list as routers
-def setLbAsRouter(id):
-    if 'lb' in id:
-        command = "sudo virt-edit -a " + id + ".qcow2 /etc/sysctl.conf -e 's/#net.ipv4.ip_forward=1/net.ipv4.ip_forward=1/'"
-        call(command.split(" "))
+def setLbAsRouter(ids):
+    for id in ids:
+        if 'lb' in id:
+            f = open("/mnt/tmp/sysctl.conf", "w+")
+            f.write("net.ipv4.ip_forward=1\n")
+            f.close()
+            command = "sudo virt-copy-in -a " + id + ".qcow2 /mnt/tmp/sysctl.conf /etc/"
+            call(command.split(" "))
+            
+# This function includes the host in LAN1      
+def addHostToVirtualNetwork():
+    commandIfConfig = "sudo ifconfig LAN1 10.0.1.3/24"
+    commandIpRoute = "sudo ip route add 10.0.0.0/16 via 10.0.1.1"
+    call(commandIfConfig.split(" "))
+    call(commandIpRoute.split(" "))
 
+#-----------------HAproxy------------------------------
+def createHAProxy(ids):
+    # For the host the statictics page is in http://10.0.1.1:8001
+    for i in ids:
+        if 'lb' in i:
+            commandStract = "sudo virt-copy-out -a " + i + ".qcow2 /etc/haproxy/haproxy.cfg " + os.getcwd()
+            call(commandStract.split(" "))
+            commandPerm = "cp " + os.getcwd() + "/haproxy.cfg " + os.getcwd() + "/phaproxy.cfg"
+            call(commandPerm.split(" "))
+            commandDelete = "rm -r " + os.getcwd() + "/haproxy.cfg"
+            call(commandDelete.split(" "))
+            commandPerm2 = "cp " + os.getcwd() + "/phaproxy.cfg " + os.getcwd() + "/haproxy.cfg"
+            call(commandPerm2.split(" "))
+            commandDelete = "rm -r " + os.getcwd() + "/phaproxy.cfg"
+            call(commandDelete.split(" "))
+            file = open("haproxy.cfg", "a")
+            file.write("frontend " + i + "\n")
+            file.write("\tbind *:80\n")
+            file.write("\tmode http\n")
+            file.write("\tdefault_backend webservers\n")
+            file.write("\n")
+            file.write("backend webservers\n")
+            file.write("\tmode http\n")
+            file.write("\tbalance roundrobin\n")
+            file.close()
+    for i in ids:
+        if 's' in i:
+            numberDirIP = [int(c) for c in list(i) if c.isdigit()][0]
+            file = open("haproxy.cfg", "a")
+            file.write("\tserver " + i + " 10.0.2.1" + str(numberDirIP) + ":80 check\n")
+            file.close()
+    file = open("haproxy.cfg", "a")
+    file.write("listen stats\n")
+    file.write("\tbind *:8001\n")
+    file.write("\tstats enable\n")
+    file.write("\tstats uri /\n")
+    file.write("\tstats hide-version\n")
+    file.write("\tstats auth admin:cdps\n")
+    file.close()
+    commandTransf= "sudo virt-copy-in -a " + [i for i in ids if 'lb' in i][0] + ".qcow2 " + os.getcwd() + "/haproxy.cfg /etc/haproxy/"
+    call(commandTransf.split(" ")) 
 #---------------- End CREATE logic & functions ---------------------
 #-------------------------------------------------------
-
+    
 #---------------- Begin START logic --------------------
 #Start virtual machines and show their consoles
 def startOrder():
+    call(["sudo", "virt-manager"])
     nMVs = findNumberMachines()
     machineImageIds = handleMVIds(nMVs[0], nMVs[1], nMVs[2])
     for i in machineImageIds:
@@ -234,6 +291,7 @@ def startOrder():
     #map(lambda x: setConfig("start" , x), machineImageIds)
     #map(lambda x: openConsoles(x), machineImageIds)
 # --------------- End START logic ----------------------
+    
 #-------------------------------------------------------
 
 #---------------- Begin STOP logic --------------------
@@ -277,16 +335,59 @@ def setConfig(order, id):
 # This function opens virtual machine consoles
 def openConsoles(id):
     os.system(f"xterm -e \'sudo virsh console " + id + "\'&")
-           
+    
+#--------------------- Start MONITORIZE logic ----------------------
+def monitorizeOrder(option = "-all"):
+    if option == "-all":
+        print("Lista de dominios y su estado")
+        com1= "sudo vish list"
+        call(com1.split(" "))
+        printNewSection()
+        print("Prueba de conexion a servidores")
+        nMVs = findNumberMachines()
+        machineImageIds = handleMVIds(nMVs[0], nMVs[1], nMVs[2])
+        for id in machineImageIds:
+            if 's' in id:
+                com2= "ping -c 5 10.0.1.1" + str([int(c) for c in list(id) if c.isdigit()][0])
+                call(com2.split(" "))
+        printNewSection()
+        # Añadir mas secciones
+    if option == "-connection":
+        print("Prueba de conexion a servidores")
+        nMVs = findNumberMachines()
+        machineImageIds = handleMVIds(nMVs[0], nMVs[1], nMVs[2])
+        for id in machineImageIds:
+            if 's' in id:
+                com2= "ping -c 5 10.0.1.1" + str([int(c) for c in list(id) if c.isdigit()][0])
+                call(com2.split(" "))
+        printNewSection()
+    
+                 
+#--------------------- Helpers
+def printNewSection():
+    print("----------------------------------")
+    print("|                                |")
+    print("----------------------------------")
+
 #------ Main logic ---------   
 if sys.argv[1] == "create":
-    createOrder(sys.argv[2])
+    try:
+        createOrder(sys.argv[2])
+    except:
+        createOrder()
+        print("There will be two servers by default ")
 elif sys.argv[1] == "start":
     startOrder()
 elif sys.argv[1] == "stop":
     stopOrder()
 elif sys.argv[1] == "release":
     releaseOrder()
+elif sys.argv[1] == "monitorize":
+    try:
+        monitorizeOrder(sys.argv[2])
+    except:
+        monitorizeOrder()
+        print("There will be two servers by default ")
 elif sys.argv[1] == "-help":
     print("")
 
