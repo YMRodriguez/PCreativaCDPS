@@ -1,7 +1,7 @@
 # Prática creativa 1 de CDPS
 Este script monta un escenario basado en máquinas virtuales KVM.
 
-https://github.com/YMRodriguez/PCreativaCDPS/blob/YMRdev/escenario.png
+![Alt text](YMRodriguez/PCreativaCDPS/blob/YMRdev/escenario.png?raw=true "Optional Title")
 
 Para ver los comandos que se pueden ejecutar hay que hacer:
 ```
