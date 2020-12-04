@@ -287,7 +287,7 @@ def startOrder():
             setUpOne("start")
             return
         else:
-            print("The parameter introduced does not match any of the virtual machine identifiers.")
+            print("The parameter introduced does not match any of the virtual machine identifiers. Use the order '-help' for more information.")
             return 
     except:  
         for i in machineImageIds:
@@ -310,7 +310,7 @@ def stopOrder():
             setUpOne("shutdown")
             return
         else:
-            print("The parameter introduced does not match any of the virtual machine identifiers.")
+            print("The parameter introduced does not match any of the virtual machine identifiers. Use the order '-help' for more information.")
             return 
     except:  
         for i in machineImageIds:
@@ -380,53 +380,70 @@ def setUpOne(order):
                 openConsoles(i)
             flag = 1
     if flag == 0:
-        print("The parameter introduced does not match any of the virtual machine identifiers.")
+        print("The parameter introduced does not match any of the virtual machine identifiers. Use the order '-help' for more information.")
     else:
         flag = 0    
  
     
 #--------------------- Start MONITORIZE logic ----------------------
-def monitorizeOrder(option = "-all"):
-    if option == "-all":
-        print("Lista de dominios y su estado")
-        com1= "sudo virsh list" 
-        call(com1.split(" "))
-        printNewSection()
-        print("Prueba de conexion a servidores")
-        nMVs = findNumberMachines()
-        machineImageIds = handleMVIds(nMVs[0], nMVs[1], nMVs[2])
-        for id in machineImageIds:
-            if 's' in id:
-                com2= "ping -c 5 10.0.1.1" + str([int(c) for c in list(id) if c.isdigit()][0])
-                call(com2.split(" "))
-        printNewSection()
-
-        # Añadir mas secciones
-    elif option == "-connection":
-        print("Prueba de conexion a servidores")
-        nMVs = findNumberMachines()
-        machineImageIds = handleMVIds(nMVs[0], nMVs[1], nMVs[2])
-        for id in machineImageIds:
-            if 's' in id:
-                com2= "ping -c 5 10.0.1.1" + str([int(c) for c in list(id) if c.isdigit()][0])
-                call(com2.split(" "))
-        printNewSection()
-    elif option == "-state":
-        nMVs = findNumberMachines()
-        machineImageIds = handleMVIds(nMVs[0], nMVs[1], nMVs[2])
-        command = "watch '"
-        for i in machineImageIds:
-            command = command + f"sudo virsh domstate {i} & "
-        del command[-3:-1]
-        command = command + "'"
-        call(command.split(" "))
+def monitorizeOrder(option="all"):
+    try:
+        if option == "all":
+            print("List of domains and their state")
+            com1= "sudo virsh list" 
+            call(com1.split(" "))
+            printNewSection()
+            print("Server connection test")
+            nMVs = findNumberMachines()
+            machineImageIds = handleMVIds(nMVs[0], nMVs[1], nMVs[2])
+            for id in machineImageIds:
+                if 's' in id:
+                    com2= "ping -c 5 10.0.1.1" + str([int(c) for c in list(id) if c.isdigit()][0])
+                    call(com2.split(" "))
+            printNewSection()
+    
+        elif option == "connection":
+            print("Server connection test")
+            nMVs = findNumberMachines()
+            machineImageIds = handleMVIds(nMVs[0], nMVs[1], nMVs[2])
+            for id in machineImageIds:
+                if 's' in id:
+                    com2= "ping -c 5 10.0.1.1" + str([int(c) for c in list(id) if c.isdigit()][0])
+                    call(com2.split(" "))
+            printNewSection()
+            
+        elif option == "state":
+            setMonitoring("domstate")
+            
+        elif option == "info":
+            setMonitoring("dominfo")
+            
+        elif option == "cpu":
+            setMonitoring("cpu-stats")
         
-                 
+        else:
+            print("The parameter introduced does not match any of the established patterns. Use the order '-help' for more information.")
+    except:
+        #print("The parameter introduced does not match any of the established patterns.")
+        return
+        
 #--------------------- Helpers
 def printNewSection():
     print("----------------------------------")
     print("|                                |")
     print("----------------------------------")
+    
+#This function sets the specific configuration for monitoring the virtual machines
+def setMonitoring(order):
+    nMVs = findNumberMachines()
+    machineImageIds = handleMVIds(nMVs[0], nMVs[1], nMVs[2])
+    command = "watch "
+    for i in machineImageIds:
+        command = command + f"sudo virsh {order} {i} & "
+    command = command [::-1]
+    command = command.replace("&", "", 1)
+    command = command [::-1] 
+    call(command.split(" ")) 
 
 #------ Main logic ---------   
 if sys.argv[1] == "create":
@@ -441,12 +458,78 @@ elif sys.argv[1] == "stop":
     stopOrder()
 elif sys.argv[1] == "release":
     releaseOrder()
-elif sys.argv[1] == "monitorize":
+elif sys.argv[1] == "monitor":
     try:
         monitorizeOrder(sys.argv[2])
     except:
         monitorizeOrder()
-        print("There will be two servers by default ")
+        print("No parameter introduced. Default (all) monitoring option presented. Use the order '-help' for more information.")
 elif sys.argv[1] == "-help":
-    print("")
+    print(" ")
+    print("------------ SCRIPT SUPPORT ------------")
+    print(" ")
+    print("This is a Python script that implements the automatic creation of a load balancer virtual scenario.")
+    print(" ")
+    print("The script understands the following orders:")
+    print(" ")
+    print("CREATE")
+    print("This order creates the .qcow2 and the XML files of each VM, along with all the configuration files required for the scenario's correct functioning.")
+    print("The 'create' order implements an scenario with two servers, one load balancer and one client by default (if no extra parameters are used). However, the number of servers of the scenario can be programmed by the user just by adding an extra parameter.The 'create' order implements the creation and configuration of a HAproxy load balancer.")
+    print("The structure of the 'create' order command would be:")
+    print(" ")
+    print("python3 pc1.py create <NumberOfServers>")
+    print(" ")
+    print("START")
+    print("This order is used to initialize the scenario's VMs and to display their textual consoles.")
+    print("The 'start' order allows to initialize either all the VMs of the scenario or just a single VM indicated by the user (extra parameter).")
+    print("The structure of the 'start' order command would be:")
+    print(" ")
+    print("python3 pc1.py start <VirtualMachineDomain>.")
+    print(" ")
+    print("If no extra parameter is specified, the 'start' order will just initialize all the scenario's VMs.")
+    print(" ")
+    print("STOP")
+    print("This order is used to shut down the scenario's VMs.")
+    print("The 'stop' order allows to shut down either all the VMs of the scenario or just a single VM indicated by the user (extra parameter).")
+    print("The structure of the 'stop' order command would be:")
+    print(" ")
+    print("python3 pc1.py stop <VirtualMachineDomain>.")
+    print(" ")
+    print("If no extra parameter is specified, the 'stop' order will just shut down all the scenario's VMs.")
+    print(" ")
+    print("RELEASE")
+    print("This order deletes all created files and VMs in order to release the practice's scenario.")
+    print("The structure of the 'release' order command would be:")
+    print(" ")
+    print("python3 pc1.py release")
+    print(" ")
+    print("---COMPLEMENTARY ORDERS---")
+    print(" ")
+    print("MONITOR")
+    print("This order implements a monitoring feature to visualize and control the usage of the scenario's VMs.")
+    print("The 'monitor' order allows to perform server connection tests and to visualize the information and state of each VM, among other functionalities.")
+    print("The structure of the 'monitor' order command would be:")
+    print(" ")
+    print("python3 pc1.py monitor <MonitoringOption>")
+    print(" ")
+    print("The order supports the following monitoring options:")
+    print("    - 'all'. Displays a list of the VM domains and their state and run server connection tests.")
+    print("    - 'connection'. Run server connection tests.")
+    print("    - 'state'. Opens a panel (through the 'watch' command) which periodically displays the updated state of the machines.")
+    print("    - 'info'. Opens a panel (through the 'watch' command) which periodically displays updated information regarding the VMs (identifier, memory usage, tasks carried out...).")
+    print("    - 'cpu'. Opens a panel (through the 'watch' command) which periodically displays the updated CPU-time information of the machines.")
+    print(" ")
+    print("HELP")
+    print("This order displays a manual with the main documentation regarding the functioning of the script.")
+    print("The structure of the 'help' order command would be:")
+    print(" ")
+    print("python3 pc1.py -help")
+    print(" ")
+    print("------------END------------")
+    print(" ")
+    
+else:
+    print("Incorrect order, introduce one of the established orders. Use the order '-help' for more information.")
+    
+    
     
