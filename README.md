@@ -6,6 +6,8 @@ Este script monta un escenario basado en máquinas virtuales KVM.
 Para ver los comandos que se pueden ejecutar hay que hacer:
 ```
 python3 pc1.py -help
+```
+
 
 ## Mejoras implementadas
 1. Balanceador usando HAProxy.
